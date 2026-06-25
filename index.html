@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fun.artt.dev</title>
+<meta name="description" content="A junk drawer of small experiments.">
+<style>
+  /* ---- edit nothing below to add projects; just push a new folder to the repo ---- */
+  :root {
+    --paper: #faf7f1;
+    --ink: #1f1c18;
+    --dim: #8a8378;
+    --line: #e7e0d4;
+    --accent: #c4502a;
+    --hover: #f3ede1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #16140f;
+      --ink: #ece7dd;
+      --dim: #8f887b;
+      --line: #2c2820;
+      --accent: #e0744f;
+      --hover: #211d16;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 17px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    justify-content: center;
+    padding: 9vh 24px 64px;
+  }
+  .wrap { width: 100%; max-width: 620px; }
+
+  header { margin-bottom: 40px; }
+  h1 {
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin: 0 0 14px;
+  }
+  h1 .dot { color: var(--accent); }
+  .blurb {
+    color: var(--dim);
+    font-size: 15.5px;
+    max-width: 52ch;
+    margin: 0;
+  }
+
+  .meta {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin: 0 0 10px;
+  }
+
+  ul { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+  li { border-bottom: 1px solid var(--line); }
+  a.item {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 15px 12px 15px 14px;
+    margin: 0 -12px 0 -14px;
+    text-decoration: none;
+    color: var(--ink);
+    border-radius: 8px;
+    transition: background 120ms ease;
+  }
+  a.item:hover { background: var(--hover); }
+  a.item .name {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 16px;
+  }
+  a.item .arrow {
+    margin-left: auto;
+    color: var(--dim);
+    transition: transform 120ms ease, color 120ms ease;
+  }
+  a.item:hover .arrow { color: var(--accent); transform: translateX(3px); }
+
+  .state {
+    color: var(--dim);
+    font-size: 15px;
+    padding: 18px 0;
+  }
+  .state code {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 13px;
+    background: var(--hover);
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+
+  footer {
+    margin-top: 48px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+    font-size: 14px;
+    color: var(--dim);
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>fun<span class="dot">.</span>artt<span class="dot">.</span>dev</h1>
+      <p class="blurb">
+        A junk drawer of small experiments — mostly single-page things,
+        often built with AI, rarely finished, never serious. Each one lives
+        in its own folder. Poke around.
+      </p>
+    </header>
+
+    <p class="meta" id="meta">loading&hellip;</p>
+    <ul id="list"></ul>
+    <div class="state" id="state" hidden></div>
+
+    <footer>
+      Made by <a href="https://artt.dev">artt.dev</a>
+    </footer>
+  </div>
+
+<script>
+  // The repo that backs this site. Public repos only (unauthenticated API).
+  const REPO = "artt/fun";
+
+  // Folders to hide from the listing.
+  const IGNORE = new Set([".github", ".vercel", "node_modules", "public", "assets"]);
+
+  const listEl  = document.getElementById("list");
+  const metaEl  = document.getElementById("meta");
+  const stateEl = document.getElementById("state");
+
+  function showState(html) {
+    stateEl.innerHTML = html;
+    stateEl.hidden = false;
+    metaEl.hidden = true;
+  }
+
+  async function load() {
+    try {
+      const res = await fetch(`https://api.github.com/repos/${REPO}/contents/`, {
+        headers: { "Accept": "application/vnd.github+json" }
+      });
+
+      if (res.status === 403) {
+        showState(
+          "GitHub's API is rate-limited right now (60 requests/hour per IP). " +
+          "Refresh in a bit — your projects are still there, just not listed this second."
+        );
+        return;
+      }
+      if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
+
+      const entries = await res.json();
+      const dirs = entries
+        .filter(e => e.type === "dir" && !e.name.startsWith(".") && !IGNORE.has(e.name))
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+
+      if (dirs.length === 0) {
+        showState("Nothing here yet. Push a folder with an <code>index.html</code> to fill it.");
+        return;
+      }
+
+      metaEl.textContent = `${dirs.length} project${dirs.length === 1 ? "" : "s"}`;
+      listEl.innerHTML = dirs.map(d => `
+        <li>
+          <a class="item" href="./${encodeURIComponent(d.name)}/">
+            <span class="name">${d.name}</span>
+            <span class="arrow">&rarr;</span>
+          </a>
+        </li>`).join("");
+
+    } catch (err) {
+      showState(
+        "Couldn't reach GitHub to build the listing. The projects still work if you " +
+        "know the path — try <code>/foldername/</code> directly."
+      );
+      console.error(err);
+    }
+  }
+
+  load();
+</script>
+</body>
+</html>

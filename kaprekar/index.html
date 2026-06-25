@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Kaprekar's Operation — the transition map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ground:#0C1120; --panel:#111934; --line:#1E2A48;
+    --ink:#C8D4EC; --ink-dim:#6F7EA0; --gold:#FBBF24; --gold-soft:#92700f;
+    --trace:#F4F8FF; --ramp-lo:#3A4E8F; --ramp-hi:#5EEAD4;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:var(--ground);color:var(--ink);
+    font-family:"Space Grotesk",system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+  .mono{font-family:"Space Mono",ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;}
+  .wrap{max-width:980px;margin:0 auto;padding:22px 18px 60px;}
+
+  header{display:flex;flex-direction:column;gap:6px;margin-bottom:18px;}
+  .eyebrow{font-size:11px;letter-spacing:.32em;text-transform:uppercase;color:var(--gold);font-weight:700;}
+  h1{margin:0;font-size:clamp(28px,7vw,46px);font-weight:700;letter-spacing:-.02em;line-height:1;}
+  h1 .num{font-family:"Space Mono",monospace;color:var(--gold);}
+  .lede{color:var(--ink-dim);font-size:15px;max-width:62ch;line-height:1.5;margin-top:2px;}
+  .lede b{color:var(--ink);font-weight:500;}
+
+  .layout{display:grid;grid-template-columns:1fr;gap:18px;}
+  @media(min-width:760px){.layout{grid-template-columns:minmax(0,1.15fr) minmax(240px,.85fr);align-items:start;}}
+
+  .plotcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;}
+  .plot-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+  .axis-note{font-size:11px;color:var(--ink-dim);letter-spacing:.04em;}
+  .axis-note .mono{color:var(--ink);}
+  .canvas-host{position:relative;}
+  canvas{width:100%;height:auto;display:block;border-radius:8px;touch-action:none;cursor:grab;}
+
+  .zoomctl{position:absolute;top:8px;right:8px;display:flex;flex-direction:column;gap:5px;}
+  .zb{width:30px;height:30px;border-radius:7px;border:1px solid var(--line);background:rgba(17,25,52,.82);
+    color:var(--ink);font-size:17px;line-height:1;cursor:pointer;backdrop-filter:blur(4px);
+    display:flex;align-items:center;justify-content:center;transition:all .12s;font-family:"Space Mono",monospace;}
+  .zb:hover{border-color:#3a4e8f;background:rgba(28,38,72,.9);}
+  .zb.reset{font-size:13px;}
+
+  .tip{position:absolute;pointer-events:none;background:rgba(8,12,24,.94);border:1px solid var(--gold-soft);
+    border-radius:7px;padding:6px 9px;font-family:"Space Mono",monospace;font-size:12px;color:var(--ink);
+    transform:translate(-50%,-130%);white-space:nowrap;opacity:0;transition:opacity .08s;z-index:5;line-height:1.4;}
+  .tip b{color:var(--gold);}
+
+  .hint{font-size:11px;color:var(--ink-dim);margin-top:9px;letter-spacing:.02em;}
+  .zoomstate{color:#8898be;}
+
+  .legend{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:11px;color:var(--ink-dim);}
+  .bar{height:8px;flex:1;border-radius:99px;background:linear-gradient(90deg,var(--ramp-lo),#4d7bd8,var(--ramp-hi));}
+  .legend .dot{width:10px;height:10px;border-radius:50%;background:var(--gold);
+    box-shadow:0 0 8px 2px rgba(251,191,36,.6);flex:none;}
+  .pathleg{margin-top:7px;gap:16px;}
+  .pathleg .sw{width:16px;height:3px;border-radius:2px;display:inline-block;vertical-align:middle;margin-right:6px;}
+  .sw.rise{background:#F4F8FF;} .sw.cross{background:#FB7185;}
+
+  .controls{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;}
+  .ctl-row{margin-bottom:18px;}
+  .ctl-label{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-dim);margin-bottom:8px;display:block;}
+  .segwrap{display:flex;gap:6px;}
+  .seg{flex:1;background:transparent;border:1px solid var(--line);color:var(--ink-dim);
+    font-family:"Space Mono",monospace;font-size:15px;padding:9px 0;border-radius:8px;cursor:pointer;transition:all .15s;font-weight:700;}
+  .seg:hover{border-color:#33446e;color:var(--ink);}
+  .seg.on{background:var(--gold);border-color:var(--gold);color:#1a1303;}
+
+  .inputrow{display:flex;gap:8px;}
+  .numin{flex:1;min-width:0;background:var(--ground);border:1px solid var(--line);border-radius:8px;
+    color:var(--ink);font-family:"Space Mono",monospace;font-size:18px;padding:10px 12px;letter-spacing:.08em;}
+  .numin:focus{outline:none;border-color:var(--gold);}
+  .ghost{background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:8px;
+    padding:0 13px;cursor:pointer;font-size:16px;transition:all .15s;}
+  .ghost:hover{border-color:#33446e;background:#161f3c;}
+
+  .seq{margin-top:4px;}
+  .seq-line{display:flex;align-items:center;gap:9px;padding:5px 6px;border-bottom:1px solid #161f3c;border-radius:6px;transition:background .12s;}
+  .seq-line:hover{background:#172038;}
+  .seq-line:last-child{border-bottom:none;}
+  .step-i{font-size:11px;color:var(--ink-dim);width:20px;text-align:right;flex:none;}
+  .val{font-family:"Space Mono",monospace;font-size:19px;letter-spacing:.06em;}
+  .calc{font-size:11px;color:var(--ink-dim);margin-left:auto;}
+  .calc .mono{color:#8898be;}
+  .land{color:var(--gold);font-weight:700;}
+  .land-tag{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold);
+    border:1px solid var(--gold-soft);border-radius:99px;padding:2px 8px;margin-left:auto;}
+
+  .summary{margin-top:14px;padding-top:14px;border-top:1px solid var(--line);font-size:13px;color:var(--ink-dim);line-height:1.55;}
+  .summary b{color:var(--ink);} .summary .mono{color:var(--gold);}
+
+  footer{margin-top:28px;font-size:12px;color:var(--ink-dim);line-height:1.6;max-width:70ch;}
+  footer code{font-family:"Space Mono",monospace;color:#8898be;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Iterated digit map</span>
+    <h1>Kaprekar's Operation</h1>
+    <p class="lede">Sort the digits <b>high&#8209;to&#8209;low</b>, sort them <b>low&#8209;to&#8209;high</b>, subtract. Repeat. Four&#8209;digit numbers all fall into <b class="num">6174</b>. The plot is many&#8209;to&#8209;one, so zoom in to pick the bands apart.</p>
+  </header>
+
+  <div class="layout">
+    <div class="plotcard">
+      <div class="plot-head">
+        <span class="axis-note">vertical <span class="mono">f(X)</span> &nbsp;·&nbsp; horizontal <span class="mono">X</span></span>
+        <span class="axis-note" id="rangeNote"></span>
+      </div>
+      <div class="canvas-host">
+        <canvas id="plot" aria-label="Zoomable scatter plot of X versus f(X)"></canvas>
+        <div class="zoomctl">
+          <button class="zb" id="zin" title="Zoom in">+</button>
+          <button class="zb" id="zout" title="Zoom out">&minus;</button>
+          <button class="zb reset" id="zreset" title="Reset view">&#9678;</button>
+        </div>
+        <div class="tip" id="tip"></div>
+      </div>
+      <div class="hint">Drag to pan &middot; tap a point to trace &middot; zoom with the buttons &nbsp;<span class="zoomstate" id="zoomstate">1.0&times;</span></div>
+      <div class="legend">
+        <span>fewer steps</span><span class="bar"></span><span>more</span>
+        <span style="margin-left:8px;display:inline-flex;align-items:center;gap:5px;"><span class="dot"></span>fixed point</span>
+      </div>
+      <div class="legend pathleg">
+        <span><span class="sw rise"></span>rise to f(X)</span>
+        <span><span class="sw cross"></span>across to y = x</span>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="ctl-row">
+        <label class="ctl-label">Digits</label>
+        <div class="segwrap" id="digitSeg">
+          <button class="seg" data-d="2">2</button>
+          <button class="seg" data-d="3">3</button>
+          <button class="seg on" data-d="4">4</button>
+          <button class="seg" data-d="5">5</button>
+        </div>
+      </div>
+      <div class="ctl-row">
+        <label class="ctl-label">Trace a number</label>
+        <div class="inputrow">
+          <input class="numin mono" id="numin" inputmode="numeric" autocomplete="off" />
+          <button class="ghost" id="randBtn" title="Random start">&#10227;</button>
+        </div>
+      </div>
+      <div class="seq mono" id="seq"></div>
+      <div class="summary" id="summary"></div>
+    </div>
+  </div>
+
+  <footer>
+    Each point is <code>(X, f(X))</code>. Because <code>f</code> ignores digit order and every output is a multiple of 9, thousands of inputs collapse onto a few output levels &mdash; the horizontal bands. Zoom in and you'll see each band is a dense row of distinct X's that all land on the same value. In a trace, <b style="color:#E8EEF8">white</b> segments rise from X up to f(X); <b style="color:#FB7185">rose</b> segments slide across to the 45° line, where the next step begins. <span id="cycnote"></span>
+  </footer>
+</div>
+
+<script>
+const cv = document.getElementById('plot');
+const ctx = cv.getContext('2d');
+const seqEl = document.getElementById('seq');
+const summaryEl = document.getElementById('summary');
+const numin = document.getElementById('numin');
+const rangeNote = document.getElementById('rangeNote');
+const cycnote = document.getElementById('cycnote');
+const tip = document.getElementById('tip');
+const zoomstate = document.getElementById('zoomstate');
+const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+let D=4, maxV=9999;
+let scatter=[], maxSteps=1, fixedPoints=[];
+let current=null;
+let dpr=Math.min(window.devicePixelRatio||1,2);
+let hover=null;
+const offscreen=document.createElement('canvas');
+const octx=offscreen.getContext('2d');
+
+// view transform (in screen px): screen = base*zoom + pan
+const view={zoom:1, panX:0, panY:0};
+const ZMAX=80;
+
+// ---- Kaprekar core ----
+function fStep(n){
+  const s=String(n).padStart(D,'0').split('');
+  const desc=s.slice().sort((a,b)=>b.charCodeAt(0)-a.charCodeAt(0)).join('');
+  const asc =s.slice().sort((a,b)=>a.charCodeAt(0)-b.charCodeAt(0)).join('');
+  return parseInt(desc,10)-parseInt(asc,10);
+}
+function trace(n,cap=120){
+  const seq=[n]; const seen=new Map(); seen.set(n,0); let cur=n;
+  for(let i=0;i<cap;i++){
+    const nx=fStep(cur);
+    if(nx===cur) return {seq,type:'fixed',terminal:cur,steps:i};
+    if(seen.has(nx)){seq.push(nx);return {seq,type:'cycle',cycleStart:seen.get(nx),steps:i+1};}
+    seq.push(nx); seen.set(nx,seq.length-1); cur=nx;
+  }
+  return {seq,type:'cap',steps:cap};
+}
+function distinctDigits(n){return new Set(String(n).padStart(D,'0').split('')).size;}
+
+function build(d){
+  D=d; maxV=Math.pow(10,d)-1; scatter=[]; maxSteps=1;
+  const fpSet=new Set(); const memo=new Map();
+  const stepsOf=n=>{ if(memo.has(n))return memo.get(n); const s=trace(n).seq.length-1; memo.set(n,s); return s; };
+  for(let x=0;x<=maxV;x++){
+    const fx=fStep(x);
+    if(fx===x && distinctDigits(x)>1) fpSet.add(x);
+    const s=stepsOf(x); if(s>maxSteps)maxSteps=s;
+    scatter.push([x,fx,s]);
+  }
+  fixedPoints=[...fpSet].sort((a,b)=>a-b);
+  cycnote.textContent = fixedPoints.length ? '' :
+    'At this width there is no single constant — numbers settle into a repeating cycle instead.';
+  resetView(); render();
+}
+
+// ---- color ----
+function ramp(t){t=Math.max(0,Math.min(1,t));
+  const a=[58,78,143],b=[77,123,216],c=[94,234,212];let r,g,bl;
+  if(t<.5){const u=t/.5;r=lerp(a[0],b[0],u);g=lerp(a[1],b[1],u);bl=lerp(a[2],b[2],u);}
+  else{const u=(t-.5)/.5;r=lerp(b[0],c[0],u);g=lerp(b[1],c[1],u);bl=lerp(b[2],c[2],u);}
+  return `rgb(${r|0},${g|0},${bl|0})`;}
+function lerp(a,b,t){return a+(b-a)*t;}
+
+// ---- geometry ----
+const PAD={l:48,r:14,t:14,b:34};
+let plotW,plotH,W,H;
+function layout(){
+  const cssW=cv.clientWidth||520, cssH=cssW;
+  W=cssW;H=cssH; cv.width=cssW*dpr; cv.height=cssH*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  plotW=W-PAD.l-PAD.r; plotH=H-PAD.t-PAD.b;
+}
+const mapX=v=>PAD.l + (v/maxV)*plotW*view.zoom + view.panX;
+const mapY=v=>PAD.t + plotH - (v/maxV)*plotH*view.zoom + view.panY;
+const invX=px=>((px-PAD.l-view.panX)/(plotW*view.zoom))*maxV;
+const invY=py=>((PAD.t+plotH+view.panY-py)/(plotH*view.zoom))*maxV;
+
+function clampView(){
+  view.zoom=Math.max(1,Math.min(ZMAX,view.zoom));
+  view.panX=Math.max(-(view.zoom-1)*plotW,Math.min(0,view.panX));
+  view.panY=Math.max(0,Math.min((view.zoom-1)*plotH,view.panY));
+}
+function resetView(){view.zoom=1;view.panX=0;view.panY=0;}
+
+function zoomAt(sx,sy,factor){
+  const nx=(sx-PAD.l-view.panX)/(plotW*view.zoom);
+  const ny=(PAD.t+plotH+view.panY-sy)/(plotH*view.zoom);
+  view.zoom*=factor;
+  view.zoom=Math.max(1,Math.min(ZMAX,view.zoom));
+  view.panX=sx-PAD.l-nx*plotW*view.zoom;
+  view.panY=sy-PAD.t-plotH+ny*plotH*view.zoom;
+  clampView(); render();
+}
+
+// ---- ticks ----
+function niceTicks(min,max,count){
+  const span=Math.max(1,max-min), raw=span/count;
+  const mag=Math.pow(10,Math.floor(Math.log10(raw)));
+  const norm=raw/mag, step=(norm<1.5?1:norm<3?2:norm<7?5:10)*mag;
+  const out=[]; let t=Math.ceil(min/step)*step;
+  for(;t<=max+1e-6;t+=step) out.push(Math.round(t));
+  return out;
+}
+
+function renderStatic(){
+  layout(); clampView();
+  offscreen.width=cv.width; offscreen.height=cv.height;
+  octx.setTransform(dpr,0,0,dpr,0,0);
+  octx.clearRect(0,0,W,H);
+
+  const vx0=Math.max(0,invX(PAD.l)), vx1=Math.min(maxV,invX(PAD.l+plotW));
+  const vy0=Math.max(0,invY(PAD.t+plotH)), vy1=Math.min(maxV,invY(PAD.t));
+
+  octx.strokeStyle='#1A2442'; octx.lineWidth=1;
+  octx.font='10px "Space Mono", monospace';
+  octx.save();octx.beginPath();octx.rect(PAD.l,PAD.t,plotW,plotH);octx.clip();
+  octx.globalAlpha=.5;
+  for(const v of niceTicks(vx0,vx1,5)){const gx=mapX(v);
+    octx.beginPath();octx.moveTo(gx,PAD.t);octx.lineTo(gx,PAD.t+plotH);octx.stroke();}
+  for(const v of niceTicks(vy0,vy1,5)){const gy=mapY(v);
+    octx.beginPath();octx.moveTo(PAD.l,gy);octx.lineTo(PAD.l+plotW,gy);octx.stroke();}
+  octx.globalAlpha=1;octx.restore();
+
+  octx.fillStyle='#54618a';octx.textAlign='center';
+  for(const v of niceTicks(vx0,vx1,5)){const gx=mapX(v);if(gx>PAD.l+8&&gx<PAD.l+plotW-2)octx.fillText(v,gx,PAD.t+plotH+16);}
+  octx.textAlign='right';
+  for(const v of niceTicks(vy0,vy1,5)){const gy=mapY(v);if(gy>PAD.t+6&&gy<PAD.t+plotH-2)octx.fillText(v,PAD.l-6,gy+3);}
+
+  octx.save();octx.beginPath();octx.rect(PAD.l,PAD.t,plotW,plotH);octx.clip();
+  octx.globalAlpha=.9;octx.strokeStyle='#2c3a63';octx.lineWidth=1.4;octx.setLineDash([4,4]);
+  octx.beginPath();octx.moveTo(mapX(0),mapY(0));octx.lineTo(mapX(maxV),mapY(maxV));octx.stroke();
+  octx.setLineDash([]);octx.globalAlpha=1;
+
+  const base = D>=5?1.1:(D===4?1.8:(D===3?4:9));
+  const sz=Math.min(22, base*Math.max(1,view.zoom*0.9));
+  const dense = D>=5;
+  for(const [x,fx,s] of scatter){
+    const px=mapX(x); if(px<PAD.l-3||px>PAD.l+plotW+3)continue;
+    const py=mapY(fx); if(py<PAD.t-3||py>PAD.t+plotH+3)continue;
+    octx.globalAlpha=dense?0.6:0.82;
+    octx.fillStyle=ramp(s/maxSteps);
+    octx.fillRect(px-sz/2,py-sz/2,sz,sz);
+  }
+  octx.globalAlpha=1;
+
+  for(const fp of fixedPoints){
+    const gx=mapX(fp),gy=mapY(fp);
+    if(gx<PAD.l-20||gx>PAD.l+plotW+20||gy<PAD.t-20||gy>PAD.t+plotH+20)continue;
+    const grd=octx.createRadialGradient(gx,gy,0,gx,gy,16);
+    grd.addColorStop(0,'rgba(251,191,36,.95)');grd.addColorStop(1,'rgba(251,191,36,0)');
+    octx.fillStyle=grd;octx.beginPath();octx.arc(gx,gy,16,0,7);octx.fill();
+    octx.fillStyle='#FBBF24';octx.beginPath();octx.arc(gx,gy,3.4,0,7);octx.fill();
+    octx.font='700 12px "Space Mono", monospace';octx.textAlign='left';
+    octx.fillText(fp,gx+11,gy<PAD.t+24?gy+18:gy-8);
+  }
+  octx.restore();
+
+  rangeNote.innerHTML='X ∈ <span class="mono">'+Math.round(vx0)+'…'+Math.round(vx1)+'</span>';
+  zoomstate.textContent=view.zoom.toFixed(1)+'×';
+}
+function paint(){
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,W,H);
+  ctx.drawImage(offscreen,0,0,W,H);
+  ctx.save();ctx.beginPath();ctx.rect(PAD.l,PAD.t,plotW,plotH);ctx.clip();
+  if(current) drawCobweb(current,cobwebProgress);
+  drawHover();
+  ctx.restore();
+}
+function render(){ hover=null; renderStatic(); paint(); }
+
+// ---- cobweb ----
+let cobwebProgress=1,anim=null;
+const COL_RISE='#F4F8FF';   // vertical: X up to f(X)
+const COL_CROSS='#FB7185';  // horizontal: across to y = x
+function cobwebPoints(seq){const pts=[[seq[0],0]];
+  for(let i=0;i<seq.length-1;i++){pts.push([seq[i],seq[i+1]]);pts.push([seq[i+1],seq[i+1]]);}return pts;}
+function seg(pts,i){const a=pts[i],b=pts[i+1];
+  ctx.beginPath();ctx.moveTo(mapX(a[0]),mapY(a[1]));ctx.lineTo(mapX(b[0]),mapY(b[1]));ctx.stroke();}
+function drawCobweb(t,prog){
+  const seq=t.seq,L=seq.length-1;
+  const pts=cobwebPoints(seq),total=pts.length-1,shown=Math.max(1,Math.floor(total*prog));
+  ctx.lineJoin='round';ctx.lineCap='round';
+  // glow pass
+  ctx.globalAlpha=0.16;ctx.lineWidth=5;
+  for(let i=0;i<shown&&i<total;i++){ctx.strokeStyle=(i%2===0)?COL_RISE:COL_CROSS;seg(pts,i);}
+  // crisp pass
+  ctx.globalAlpha=1;ctx.lineWidth=1.8;
+  for(let i=0;i<shown&&i<total;i++){ctx.strokeStyle=(i%2===0)?COL_RISE:COL_CROSS;seg(pts,i);}
+  ctx.fillStyle='#E8EEF8';ctx.beginPath();ctx.arc(mapX(seq[0]),mapY(0),3,0,7);ctx.fill();
+  const reached=Math.min(L,Math.ceil(shown/2));
+  for(let i=1;i<=reached;i++){const v=seq[i];
+    ctx.fillStyle=fixedPoints.includes(v)?'#FBBF24':'#E8EEF8';
+    ctx.beginPath();ctx.arc(mapX(seq[i-1]),mapY(v),2.6,0,7);ctx.fill();}
+}
+function line(x1,y1,x2,y2){ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();}
+function drawHover(){
+  if(!hover)return;
+  if(hover.type==='point'){
+    const [x,fx]=hover.p,gx=mapX(x),gy=mapY(fx);
+    ctx.strokeStyle='#FBBF24';ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(gx,gy,7,0,7);ctx.stroke();
+  }else if(hover.type==='step'&&current){
+    const seq=current.seq,k=hover.k; if(k<0||k>=seq.length-1)return;
+    const a=seq[k],b=seq[k+1],yStart=(k===0)?0:a;
+    ctx.lineJoin='round';ctx.lineCap='round';
+    ctx.strokeStyle='rgba(255,255,255,.42)';ctx.lineWidth=6.5;
+    line(mapX(a),mapY(yStart),mapX(a),mapY(b));
+    line(mapX(a),mapY(b),mapX(b),mapY(b));
+    ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(mapX(a),mapY(b),3.4,0,7);ctx.fill();
+  }
+}
+function animateCobweb(){
+  if(anim)cancelAnimationFrame(anim);
+  if(reduceMotion){cobwebProgress=1;paint();return;}
+  cobwebProgress=0;const steps=current.seq.length,dur=Math.min(1400,260+steps*150),t0=performance.now();
+  (function loop(now){const p=Math.min(1,(now-t0)/dur);
+    cobwebProgress=p<1?(1-Math.pow(1-p,2)):1;paint();if(p<1)anim=requestAnimationFrame(loop);})(t0);
+}
+
+// ---- panel ----
+function showTrajectory(n){current=trace(n);renderPanel(current);animateCobweb();}
+function renderPanel(t){
+  const rows=[]; const L=t.seq.length-1;
+  for(let i=0;i<t.seq.length;i++){
+    const v=t.seq[i],isLast=i===t.seq.length-1,isFixed=t.type==='fixed'&&isLast;
+    const k=(i<L)?i:(L>0?L-1:-1);   // step whose lines this row highlights
+    const padded=String(v).padStart(D,'0');let calc='';
+    if(i<t.seq.length-1){const s=padded.split('');
+      const hi=s.slice().sort((a,b)=>b.charCodeAt(0)-a.charCodeAt(0)).join('');
+      const lo=s.slice().sort((a,b)=>a.charCodeAt(0)-b.charCodeAt(0)).join('');
+      calc=`<span class="calc"><span class="mono">${hi}</span> − <span class="mono">${lo}</span></span>`;}
+    const tag=isFixed?`<span class="land-tag">fixed</span>`:(t.type==='cycle'&&isLast)?`<span class="land-tag">cycle</span>`:'';
+    rows.push(`<div class="seq-line" data-k="${k}"><span class="step-i mono">${i===0?'·':i}</span>
+      <span class="val ${isFixed?'land':''}">${padded}</span>${calc}${tag}</div>`);
+  }
+  seqEl.innerHTML=rows.join('');
+  seqEl.querySelectorAll('.seq-line').forEach(el=>{
+    const k=parseInt(el.dataset.k,10); if(isNaN(k)||k<0)return;
+    el.addEventListener('mouseenter',()=>{hover={type:'step',k};paint();});
+    el.addEventListener('mouseleave',()=>{if(hover&&hover.type==='step'){hover=null;paint();}});
+  });
+  if(t.type==='fixed')
+    summaryEl.innerHTML=`Reaches <span class="mono">${t.terminal}</span> in <b>${t.steps}</b> step${t.steps===1?'':'s'}, then holds forever.`;
+  else if(t.type==='cycle'){const len=t.seq.slice(t.cycleStart).length-1;
+    summaryEl.innerHTML=`Falls into a <b>${len}-number cycle</b> after ${t.cycleStart} step${t.cycleStart===1?'':'s'} — it loops and never settles.`;}
+  else summaryEl.innerHTML=`Still running after ${t.steps} steps.`;
+}
+
+// ---- nearest visible point ----
+function nearestPoint(sx,sy,rad){
+  let best=null,bd=rad*rad;
+  for(const [x,fx] of scatter){
+    const px=mapX(x); if(px<PAD.l-2||px>PAD.l+plotW+2)continue;
+    const py=mapY(fx); if(py<PAD.t-2||py>PAD.t+plotH+2)continue;
+    const d=(px-sx)*(px-sx)+(py-sy)*(py-sy);
+    if(d<bd){bd=d;best=[x,fx];}
+  }
+  return best;
+}
+// distance from a screen point to a segment; used so the trace lines take tooltip priority
+function distToSeg(px,py,x1,y1,x2,y2){
+  const dx=x2-x1,dy=y2-y1,l2=dx*dx+dy*dy;
+  let t=l2?((px-x1)*dx+(py-y1)*dy)/l2:0; t=Math.max(0,Math.min(1,t));
+  return Math.hypot(px-(x1+t*dx),py-(y1+t*dy));
+}
+function nearestStep(sx,sy,rad){
+  if(!current)return null;
+  const seq=current.seq; let best=null,bd=rad;
+  for(let k=0;k<seq.length-1;k++){
+    const a=seq[k],b=seq[k+1],yStart=(k===0)?0:a;
+    const dV=distToSeg(sx,sy, mapX(a),mapY(yStart), mapX(a),mapY(b));   // rise
+    const dH=distToSeg(sx,sy, mapX(a),mapY(b),      mapX(b),mapY(b));   // cross
+    const d=Math.min(dV,dH);
+    if(d<bd){bd=d;best={src:a,res:b,k};}
+  }
+  return best;
+}
+
+// ---- interaction ----
+let activeId=null, dragStart=null, lastPan=null, moved=false;
+function relPos(e){const r=cv.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top};}
+
+cv.addEventListener('pointerdown',e=>{
+  if(activeId!==null)return;              // ignore extra fingers
+  activeId=e.pointerId; cv.setPointerCapture(e.pointerId);
+  dragStart=relPos(e); lastPan=dragStart; moved=false;
+  cv.style.cursor='grabbing'; hover=null;
+});
+cv.addEventListener('pointermove',e=>{
+  const pos=relPos(e);
+  if(e.pointerId===activeId && dragStart){
+    const dx=pos.x-dragStart.x, dy=pos.y-dragStart.y;
+    if(Math.abs(dx)>3||Math.abs(dy)>3) moved=true;
+    if(moved){view.panX+=pos.x-lastPan.x; view.panY+=pos.y-lastPan.y; clampView(); render();}
+    lastPan=pos; return;
+  }
+  if(e.pointerType==='mouse' && activeId===null){   // hover readout — lines first
+    const stp=nearestStep(pos.x,pos.y,9);
+    if(stp){
+      hover={type:'step',k:stp.k};
+      tip.style.opacity='1'; tip.style.left=pos.x+'px'; tip.style.top=pos.y+'px';
+      tip.innerHTML=`f(<b>${String(stp.src).padStart(D,'0')}</b>) = <b>${String(stp.res).padStart(D,'0')}</b>`;
+      paint(); return;
+    }
+    const np=nearestPoint(pos.x,pos.y,9);
+    if(np){
+      hover={type:'point',p:np};
+      tip.style.opacity='1';tip.style.left=mapX(np[0])+'px';tip.style.top=mapY(np[1])+'px';
+      tip.innerHTML=`X <b>${String(np[0]).padStart(D,'0')}</b> → f <b>${np[1]}</b>`;
+      paint();
+    }else{
+      if(hover){hover=null;paint();}
+      tip.style.opacity='0';
+    }
+  }
+});
+function endPointer(e){
+  if(e.pointerId!==activeId)return;
+  if(!moved && dragStart){                 // a tap → trace
+    const np=nearestPoint(dragStart.x,dragStart.y,16);
+    const x=np?np[0]:Math.round(invX(dragStart.x));
+    const v=Math.max(0,Math.min(maxV,x));
+    numin.value=String(v).padStart(D,'0'); showTrajectory(v);
+  }
+  activeId=null; dragStart=null; lastPan=null;
+  cv.style.cursor='grab';
+}
+cv.addEventListener('pointerup',endPointer);
+cv.addEventListener('pointercancel',endPointer);
+cv.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse'){tip.style.opacity='0';if(hover){hover=null;paint();}}});
+
+document.getElementById('zin').onclick=()=>zoomAt(PAD.l+plotW/2,PAD.t+plotH/2,1.5);
+document.getElementById('zout').onclick=()=>zoomAt(PAD.l+plotW/2,PAD.t+plotH/2,1/1.5);
+document.getElementById('zreset').onclick=()=>{resetView();render();};
+
+numin.addEventListener('input',()=>{const raw=numin.value.replace(/[^0-9]/g,'').slice(0,D);
+  if(raw==='')return;const v=parseInt(raw,10);if(v<=maxV)showTrajectory(v);});
+document.getElementById('randBtn').addEventListener('click',randomStart);
+function randomStart(){let v;do{v=Math.floor(Math.random()*(maxV+1));}while(distinctDigits(v)<=1&&maxV>10);
+  numin.value=String(v).padStart(D,'0');showTrajectory(v);}
+
+document.getElementById('digitSeg').addEventListener('click',e=>{
+  const b=e.target.closest('.seg');if(!b)return;
+  document.querySelectorAll('.seg').forEach(x=>x.classList.remove('on'));b.classList.add('on');
+  build(parseInt(b.dataset.d,10));randomStart();});
+
+window.addEventListener('resize',()=>{render();});
+
+build(4);numin.value='3524';showTrajectory(3524);
+</script>
+</body>
+</html>
