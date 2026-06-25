@@ -30,15 +30,22 @@
   @media(min-width:760px){.layout{grid-template-columns:minmax(0,1.15fr) minmax(240px,.85fr);align-items:start;}}
 
   .plotcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;}
-  .plot-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+  .plot-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
   .axis-note{font-size:11px;color:var(--ink-dim);letter-spacing:.04em;}
   .axis-note .mono{color:var(--ink);}
+  .xfield{display:inline-flex;align-items:center;gap:7px;font-size:11px;color:var(--ink-dim);
+    text-transform:uppercase;letter-spacing:.16em;}
+  .xnum{width:6.5ch;background:var(--ground);border:1px solid var(--line);border-radius:6px;
+    color:var(--ink);font-family:"Space Mono",monospace;font-size:14px;padding:5px 8px;
+    letter-spacing:.08em;text-align:right;text-transform:none;}
+  .xnum:focus{outline:none;border-color:var(--gold);}
+  .xnum.bad{border-color:#FB7185;}
   .canvas-host{position:relative;}
   canvas{width:100%;height:auto;display:block;border-radius:8px;touch-action:none;cursor:grab;}
 
-  .zoomctl{position:absolute;top:8px;right:8px;display:flex;flex-direction:column;gap:5px;}
-  .zb{width:30px;height:30px;border-radius:7px;border:1px solid var(--line);background:rgba(17,25,52,.82);
-    color:var(--ink);font-size:17px;line-height:1;cursor:pointer;backdrop-filter:blur(4px);
+  .zoomctl{display:flex;flex-direction:row;gap:5px;align-self:center;}
+  .zb{width:28px;height:28px;border-radius:7px;border:1px solid var(--line);background:rgba(17,25,52,.82);
+    color:var(--ink);font-size:16px;line-height:1;cursor:pointer;backdrop-filter:blur(4px);
     display:flex;align-items:center;justify-content:center;transition:all .12s;font-family:"Space Mono",monospace;}
   .zb:hover{border-color:#3a4e8f;background:rgba(28,38,72,.9);}
   .zb.reset{font-size:13px;}
@@ -100,22 +107,25 @@
   <header>
     <span class="eyebrow">Iterated digit map</span>
     <h1>Kaprekar's Operation</h1>
-    <p class="lede">Sort the digits <b>high&#8209;to&#8209;low</b>, sort them <b>low&#8209;to&#8209;high</b>, subtract. Repeat. Four&#8209;digit numbers all fall into <b class="num">6174</b>. The plot is many&#8209;to&#8209;one, so zoom in to pick the bands apart.</p>
+    <p class="lede">Pick a number &mdash; say <span class="mono" id="exNum">2026</span>. Sort its digits <b>high&#8209;to&#8209;low</b> (<span class="mono" id="exHi">6220</span>), sort them <b>low&#8209;to&#8209;high</b> (<span class="mono" id="exLo">0226</span>), and subtract: <span class="mono" id="exCalc">6220 &minus; 0226 = 5994</span>. Repeat on the result. Four&#8209;digit numbers all fall into <b class="num">6174</b>. The plot is many&#8209;to&#8209;one, so zoom in to pick the bands apart &mdash; and feel free to play around with other numbers of digits.</p>
   </header>
 
   <div class="layout">
     <div class="plotcard">
       <div class="plot-head">
         <span class="axis-note">vertical <span class="mono">f(X)</span> &nbsp;·&nbsp; horizontal <span class="mono">X</span></span>
-        <span class="axis-note" id="rangeNote"></span>
-      </div>
-      <div class="canvas-host">
-        <canvas id="plot" aria-label="Zoomable scatter plot of X versus f(X)"></canvas>
         <div class="zoomctl">
           <button class="zb" id="zin" title="Zoom in">+</button>
           <button class="zb" id="zout" title="Zoom out">&minus;</button>
           <button class="zb reset" id="zreset" title="Reset view">&#9678;</button>
         </div>
+        <label class="xfield">trace X
+          <input class="xnum mono" id="plotnum" inputmode="numeric" autocomplete="off"
+                 aria-label="Number to trace" />
+        </label>
+      </div>
+      <div class="canvas-host">
+        <canvas id="plot" aria-label="Zoomable scatter plot of X versus f(X)"></canvas>
         <div class="tip" id="tip"></div>
       </div>
       <div class="hint">Drag to pan &middot; tap a point to trace &middot; zoom with the buttons &nbsp;<span class="zoomstate" id="zoomstate">1.0&times;</span></div>
@@ -162,7 +172,11 @@ const ctx = cv.getContext('2d');
 const seqEl = document.getElementById('seq');
 const summaryEl = document.getElementById('summary');
 const numin = document.getElementById('numin');
-const rangeNote = document.getElementById('rangeNote');
+const plotnum = document.getElementById('plotnum');
+const exNum = document.getElementById('exNum');
+const exHi = document.getElementById('exHi');
+const exLo = document.getElementById('exLo');
+const exCalc = document.getElementById('exCalc');
 const cycnote = document.getElementById('cycnote');
 const tip = document.getElementById('tip');
 const zoomstate = document.getElementById('zoomstate');
@@ -317,7 +331,6 @@ function renderStatic(){
   }
   octx.restore();
 
-  rangeNote.innerHTML='X ∈ <span class="mono">'+Math.round(vx0)+'…'+Math.round(vx1)+'</span>';
   zoomstate.textContent=view.zoom.toFixed(1)+'×';
 }
 function paint(){
@@ -381,7 +394,13 @@ function animateCobweb(){
 }
 
 // ---- panel ----
-function showTrajectory(n){current=trace(n);renderPanel(current);animateCobweb();}
+// keep both number fields showing the current start X, but never clobber the one being typed in
+function syncInputs(v){
+  const padded=String(v).padStart(D,'0');
+  if(document.activeElement!==numin) numin.value=padded;
+  if(document.activeElement!==plotnum) plotnum.value=padded;
+}
+function showTrajectory(n){current=trace(n);syncInputs(current.seq[0]);renderPanel(current);animateCobweb();}
 function renderPanel(t){
   const rows=[]; const L=t.seq.length-1;
   for(let i=0;i<t.seq.length;i++){
@@ -498,6 +517,22 @@ document.getElementById('zreset').onclick=()=>{resetView();render();};
 
 numin.addEventListener('input',()=>{const raw=numin.value.replace(/[^0-9]/g,'').slice(0,D);
   if(raw==='')return;const v=parseInt(raw,10);if(v<=maxV)showTrajectory(v);});
+
+plotnum.addEventListener('input',()=>{
+  // sanity: keep digits only and cap at the active width (e.g. max 4 digits for 4-digit mode)
+  const raw=plotnum.value.replace(/[^0-9]/g,'').slice(0,D);
+  if(raw!==plotnum.value) plotnum.value=raw;
+  if(raw===''){plotnum.classList.remove('bad');return;}
+  const v=parseInt(raw,10);
+  if(v>maxV){plotnum.classList.add('bad');return;}   // out of range for this width
+  plotnum.classList.remove('bad');
+  showTrajectory(v);
+});
+// on blur, normalise back to the zero-padded current value
+plotnum.addEventListener('blur',()=>{
+  plotnum.classList.remove('bad');
+  if(current) plotnum.value=String(current.seq[0]).padStart(D,'0');
+});
 document.getElementById('randBtn').addEventListener('click',randomStart);
 function randomStart(){let v;do{v=Math.floor(Math.random()*(maxV+1));}while(distinctDigits(v)<=1&&maxV>10);
   numin.value=String(v).padStart(D,'0');showTrajectory(v);}
@@ -509,7 +544,21 @@ document.getElementById('digitSeg').addEventListener('click',e=>{
 
 window.addEventListener('resize',()=>{render();});
 
-build(4);numin.value='3524';showTrajectory(3524);
+// pick a fresh random 4-digit example each load, narrate its first step, and trace it
+function setExample(){
+  let v; do{ v=1000+Math.floor(Math.random()*9000); }while(distinctDigits(v)<=1);
+  const s=String(v).split('');
+  const hi=s.slice().sort((a,b)=>b.charCodeAt(0)-a.charCodeAt(0)).join('');
+  const lo=s.slice().sort((a,b)=>a.charCodeAt(0)-b.charCodeAt(0)).join('');
+  const diff=parseInt(hi,10)-parseInt(lo,10);
+  exNum.textContent=v;
+  exHi.textContent=hi;
+  exLo.textContent=lo;
+  exCalc.innerHTML=`${hi} &minus; ${lo} = ${String(diff).padStart(4,'0')}`;
+  showTrajectory(v);
+}
+
+build(4);setExample();
 </script>
 </body>
 </html>
